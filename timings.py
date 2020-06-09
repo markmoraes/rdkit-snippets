@@ -16,6 +16,8 @@ from hashlib import sha256
 
 from mmtimer import Timer
 
+# various primitives to time.  The second element of the value indicates
+# a dependent step whose timing will be subtracted
 steps = {
     0:('readline',-1),
     1:('MolFromSmiles',0),
