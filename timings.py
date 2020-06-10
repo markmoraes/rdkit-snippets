@@ -5,13 +5,16 @@ Mark Moraes, 20200609
 """
 
 from __future__ import print_function, division
-import os, sys, time, logging, contextlib, urllib2
+import os, sys, time
 from rdkit.Chem import Draw, MolFromSmiles, MolToSmiles, \
     AddHs, RemoveHs, MolToMolBlock
 from rdkit.Chem.AllChem import EmbedMolecule
 from rdkit.Chem.Descriptors import MolWt, TPSA, MolLogP, NumRotatableBonds, \
     NumHDonors, NumHAcceptors
-from cStringIO import StringIO
+if sys.version_info.major == 3:
+    from io import StringIO
+else:
+    from cStringIO import StringIO
 from hashlib import sha256
 
 from mmtimer import Timer
@@ -34,7 +37,7 @@ steps = {
 }
 stepmax = max(steps.keys())+1
 
-tmpname = '/tmp/tmol.'+sha256(repr((time.time(), os.getpid(), id(stepmax)))).hexdigest()
+tmpname = '/tmp/tmol.'+sha256(repr((time.time(), os.getpid(), id(stepmax))).encode()).hexdigest()
 
 def processline(t, step, line):
     global lensum
@@ -45,10 +48,10 @@ def processline(t, step, line):
     elif step == 9:
         lensum += len(sha256(line).hexdigest())
     elif step in (10, 11):
-	with open(tmpname, 'wb+') as f:
-	    print(line, file=f)
-	    if step == 11:
-		os.fsync(f.fileno())
+        with open(tmpname, 'wb+') as f:
+            print(line, file=f)
+            if step == 11:
+                os.fsync(f.fileno())
     else:
         m = MolFromSmiles(line)
         if step == 1:
@@ -89,28 +92,28 @@ if __name__ == "__main__":
     randmax = int(os.getenv('TMOL_RANDMAX', '10'))
     tmax = float(os.getenv('TMOL_TMAX', '1.'))
     for nsteps in (1,1,stepmax):
-	steptimes = {}
-	for step in range(0, nsteps):
-	    random.seed(seed)
-	    lensum = 0
-	    sys.stdin.seek(0)
-	    dependson = steps[step][1]
-	    if dependson >= 0:
-		overhead = steptimes[dependson][0]
-	    else:
-		overhead = 0.
-	    desc = steps[step][0]
-	    if nsteps != 1 and step == 0:
-		desc += "-rand%d" % randmax
-	    t = Timer(desc, overheadms=overhead, tmax=tmax)
-	    for line in sys.stdin.readlines():
-		# In first two passes, i.e.nsteps == 1, just scan all lines
-		# with step 0 to warm buffer cache.
-		# In final pass, select approx 1 in randmax lines randomly
-		# for all steps.
-		if nsteps == 1 or random.randrange(randmax) == 0:
-		    if processline(t, step, line):
-			break
-	    steptimes[step] = t.report(lensum)
+        steptimes = {}
+        for step in range(0, nsteps):
+            random.seed(seed)
+            lensum = 0
+            sys.stdin.seek(0)
+            dependson = steps[step][1]
+            if dependson >= 0:
+                overhead = steptimes[dependson][0]
+            else:
+                overhead = 0.
+            desc = steps[step][0]
+            if nsteps != 1 and step == 0:
+                desc += "-rand%d" % randmax
+            t = Timer(desc, overheadms=overhead, tmax=tmax)
+            for line in sys.stdin.readlines():
+                # In first two passes, i.e.nsteps == 1, just scan all lines
+                # with step 0 to warm buffer cache.
+                # In final pass, select approx 1 in randmax lines randomly
+                # for all steps.
+                if nsteps == 1 or random.randrange(randmax) == 0:
+                    if processline(t, step, line):
+                        break
+            steptimes[step] = t.report(lensum)
     os.remove(tmpname)
     sys.exit(0)

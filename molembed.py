@@ -6,8 +6,8 @@ from rdkit.Chem.AllChem import EmbedMolecule
 
 if __name__ == "__main__":
     for line in sys.stdin.readlines():
-	s = line.strip()
-	print(s)
+        s = line.strip()
+        print(s)
         m = MolFromSmiles(s)
         m2 = AddHs(m)
         EmbedMolecule(m2, randomSeed=2020)
