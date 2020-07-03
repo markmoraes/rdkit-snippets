@@ -11,10 +11,6 @@ from rdkit.Chem import Draw, MolFromSmiles, MolToSmiles, \
 from rdkit.Chem.AllChem import EmbedMolecule
 from rdkit.Chem.Descriptors import MolWt, TPSA, MolLogP, NumRotatableBonds, \
     NumHDonors, NumHAcceptors
-if sys.version_info.major == 3:
-    from io import StringIO
-else:
-    from cStringIO import StringIO
 from hashlib import sha256
 
 from mmtimer import Timer
@@ -23,21 +19,25 @@ from mmtimer import Timer
 # a dependent step whose timing will be subtracted
 steps = {
     0:('readline',-1),
-    1:('MolFromSmiles',0),
-    2:('GetNumAtoms',1),
-    3:('GetNumBonds',1),
-    4:('MolToSmiles',1),
-    5:('MolToMolBlock',1),
-    6:('MolToMolBlockEmbed',1),
-    7:('MolToImageSVG', 1),
-    8:('MolToImagePNG', 1),
-    9:('sha256',0),
-    10:('filewrite',0),
-    11:('fsync',10),
+    100:('MolFromSmiles',0),
+    105:('sha256',100),
+    110:('filewrite',100),
+    120:('fsync',110),
+    210:('GetNumAtoms',100),
+    220:('GetNumBonds',100),
+    300:('MolToSmiles',100),
+    400:('MolToMolBlock',100),
+    420:('MolToMolBlockEmbed',100),
+    600:('MolToImageSVG',100),
+    610:('MolToImagePNG',100),
 }
-stepmax = max(steps.keys())+1
 
-tmpname = '/tmp/tmol.'+sha256(repr((time.time(), os.getpid(), id(stepmax))).encode()).hexdigest()
+tmpname = '/tmp/tmol.'+sha256(repr((time.time(), os.getpid(), id(steps))).encode()).hexdigest()
+
+def mol2file(m, t):
+    tf = tmpname + '.' + t
+    Draw.MolToFile(m, tf, imageType=t)
+    return os.stat(tf).st_size
 
 def processline(t, step, line):
     global lensum
@@ -45,39 +45,36 @@ def processline(t, step, line):
         return 1
     if step == 0:
         lensum += len(line)
-    elif step == 9:
-        lensum += len(sha256(line).hexdigest())
-    elif step in (10, 11):
-        with open(tmpname, 'wb+') as f:
-            print(line, file=f)
-            if step == 11:
-                os.fsync(f.fileno())
     else:
         m = MolFromSmiles(line)
-        if step == 1:
+        if step == 100:
             lensum += len(line)
-        elif step == 2:
+        elif step == 105:
+            lensum += len(sha256(line).hexdigest())
+        elif step in (110, 120):
+            with open(tmpname, 'wb+') as f:
+                print(line, file=f)
+                if step == 120:
+                    os.fsync(f.fileno())
+            lensum += os.stat(tmpname).st_size
+        elif step == 210:
             lensum += m.GetNumAtoms()
-        elif step == 3:
+        elif step == 220:
             lensum += m.GetNumBonds()
-        elif step == 4:
+        elif step == 300:
             lensum += len(MolToSmiles(m))
-        elif step == 5:
+        elif step == 400:
             lensum += len(MolToMolBlock(m))
-        elif step == 6:
+        elif step == 420:
             m2 = AddHs(m)
             EmbedMolecule(m2, randomSeed=2020)
             m2 = RemoveHs(m2)
             m2.SetProp("_Name", "test")
             lensum += len(MolToMolBlock(m2))
-        elif step == 7:
-            sio = StringIO()
-            Draw.MolToFile(m, sio, imageType='svg')
-            lensum += sio.tell()
-        elif step == 8:
-            sio = StringIO()
-            Draw.MolToFile(m, sio, imageType='png')
-            lensum += sio.tell()
+        elif step == 600:
+            lensum += mol2file(m, 'svg')
+        elif step == 610:
+            lensum += mol2file(m, 'png')
         else:
             raise ValueError("Not implemented step "+str(step))
                 
@@ -91,9 +88,9 @@ if __name__ == "__main__":
     seed = int(os.getenv('TMOL_SEED', time.time()))
     randmax = int(os.getenv('TMOL_RANDMAX', '10'))
     tmax = float(os.getenv('TMOL_TMAX', '1.'))
-    for nsteps in (1,1,stepmax):
+    for nsteps in (1,1,1000):
         steptimes = {}
-        for step in range(0, nsteps):
+        for step in sorted(steps.keys())[:nsteps]:
             random.seed(seed)
             lensum = 0
             sys.stdin.seek(0)
